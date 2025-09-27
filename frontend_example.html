@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deal or No Deal - Banker Agent</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .game-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .game-header h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .game-state {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .game-state h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        .cards-display {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .card {
+            background: #007bff;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-weight: bold;
+            min-width: 60px;
+            text-align: center;
+        }
+        .burnt-card {
+            background: #dc3545;
+            text-decoration: line-through;
+        }
+        .chat-container {
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            height: 400px;
+            overflow-y: auto;
+            padding: 15px;
+            margin-bottom: 20px;
+            background: #f8f9fa;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .user-message {
+            background: #007bff;
+            color: white;
+            margin-left: 20%;
+        }
+        .banker-message {
+            background: #28a745;
+            color: white;
+            margin-right: 20%;
+        }
+        .offer-message {
+            background: #ffc107;
+            color: #212529;
+            border: 2px solid #ffc107;
+            font-weight: bold;
+        }
+        .input-container {
+            display: flex;
+            gap: 10px;
+        }
+        .message-input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        .send-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .send-button:hover {
+            background: #0056b3;
+        }
+        .send-button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .action-button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .accept-button {
+            background: #28a745;
+            color: white;
+        }
+        .reject-button {
+            background: #dc3545;
+            color: white;
+        }
+        .start-button {
+            background: #17a2b8;
+            color: white;
+            padding: 15px 30px;
+            font-size: 18px;
+        }
+        .status {
+            text-align: center;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .status.loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="game-header">
+            <h1>🎰 Deal or No Deal - AI Banker</h1>
+            <p>Chat with our AI banker and negotiate your way to victory!</p>
+        </div>
+
+        <div id="status" class="status" style="display: none;"></div>
+
+        <div id="gameState" class="game-state" style="display: none;">
+            <h3>Game State</h3>
+            <div>
+                <strong>Round:</strong> <span id="currentRound">1</span>
+            </div>
+            <div>
+                <strong>Remaining Cards:</strong>
+                <div id="remainingCards" class="cards-display"></div>
+            </div>
+            <div>
+                <strong>Burnt Cards:</strong>
+                <div id="burntCards" class="cards-display"></div>
+            </div>
+            <div id="currentOffer" style="display: none;">
+                <strong>Current Offer:</strong> $<span id="offerAmount">0</span>
+            </div>
+        </div>
+
+        <div id="chatContainer" class="chat-container" style="display: none;">
+            <!-- Messages will be added here -->
+        </div>
+
+        <div id="inputSection" style="display: none;">
+            <div class="input-container">
+                <input type="text" id="messageInput" class="message-input" placeholder="Type your message to the banker..." />
+                <button id="sendButton" class="send-button">Send</button>
+            </div>
+            <div class="action-buttons">
+                <button id="acceptButton" class="action-button accept-button" style="display: none;">Accept Deal</button>
+                <button id="rejectButton" class="action-button reject-button" style="display: none;">Reject Deal</button>
+            </div>
+        </div>
+
+        <div id="startSection" style="text-align: center;">
+            <button id="startButton" class="action-button start-button">Start New Game</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8009';
+        let currentGameId = null;
+        let currentOffer = null;
+
+        // DOM elements
+        const statusDiv = document.getElementById('status');
+        const gameStateDiv = document.getElementById('gameState');
+        const chatContainer = document.getElementById('chatContainer');
+        const inputSection = document.getElementById('inputSection');
+        const startSection = document.getElementById('startSection');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const acceptButton = document.getElementById('acceptButton');
+        const rejectButton = document.getElementById('rejectButton');
+        const startButton = document.getElementById('startButton');
+
+        // Event listeners
+        startButton.addEventListener('click', startNewGame);
+        sendButton.addEventListener('click', sendMessage);
+        acceptButton.addEventListener('click', () => acceptDeal());
+        rejectButton.addEventListener('click', () => rejectDeal());
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        function showStatus(message, type = 'loading') {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+        }
+
+        function hideStatus() {
+            statusDiv.style.display = 'none';
+        }
+
+        function addMessage(sender, message, messageType = 'text') {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}-message`;
+            
+            if (messageType === 'offer') {
+                messageDiv.classList.add('offer-message');
+            }
+            
+            messageDiv.innerHTML = `
+                <strong>${sender === 'user' ? 'You' : 'Banker'}:</strong><br>
+                ${message.replace(/\n/g, '<br>')}
+            `;
+            
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function updateGameState(gameState) {
+            document.getElementById('currentRound').textContent = gameState.round;
+            
+            // Update remaining cards
+            const remainingCardsDiv = document.getElementById('remainingCards');
+            remainingCardsDiv.innerHTML = '';
+            gameState.remaining_cards.forEach(card => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = 'card';
+                cardDiv.textContent = `$${card.toLocaleString()}`;
+                remainingCardsDiv.appendChild(cardDiv);
+            });
+            
+            // Update burnt cards
+            const burntCardsDiv = document.getElementById('burntCards');
+            burntCardsDiv.innerHTML = '';
+            gameState.burnt_cards.forEach(card => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = 'card burnt-card';
+                cardDiv.textContent = `$${card.toLocaleString()}`;
+                burntCardsDiv.appendChild(cardDiv);
+            });
+            
+            // Update current offer
+            if (gameState.current_offer) {
+                document.getElementById('offerAmount').textContent = gameState.current_offer.toLocaleString();
+                document.getElementById('currentOffer').style.display = 'block';
+                currentOffer = gameState.current_offer;
+            }
+        }
+
+        async function startNewGame() {
+            showStatus('Starting new game...', 'loading');
+            
+            try {
+                const response = await fetch(`${API_BASE}/start-game`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({})
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentGameId = data.game_id;
+                    updateGameState(data.game_state);
+                    addMessage('banker', data.banker_message, 'offer');
+                    
+                    // Show game interface
+                    gameStateDiv.style.display = 'block';
+                    chatContainer.style.display = 'block';
+                    inputSection.style.display = 'block';
+                    startSection.style.display = 'none';
+                    
+                    hideStatus();
+                } else {
+                    showStatus(`Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`Error starting game: ${error.message}`, 'error');
+            }
+        }
+
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message || !currentGameId) return;
+            
+            // Add user message to chat
+            addMessage('user', message);
+            messageInput.value = '';
+            sendButton.disabled = true;
+            
+            try {
+                const response = await fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        game_id: currentGameId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    const bankerResponse = data.banker_response;
+                    updateGameState(bankerResponse.game_state);
+                    addMessage('banker', bankerResponse.message, bankerResponse.message_type);
+                    
+                    // Show action buttons if there's an offer
+                    if (bankerResponse.offer) {
+                        acceptButton.style.display = 'inline-block';
+                        rejectButton.style.display = 'inline-block';
+                    } else {
+                        acceptButton.style.display = 'none';
+                        rejectButton.style.display = 'none';
+                    }
+                    
+                    // Check if game is over
+                    if (bankerResponse.message_type === 'deal_accepted' || 
+                        bankerResponse.message_type === 'game_over') {
+                        acceptButton.style.display = 'none';
+                        rejectButton.style.display = 'none';
+                        sendButton.disabled = true;
+                        messageInput.disabled = true;
+                    }
+                } else {
+                    addMessage('banker', `Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                addMessage('banker', `Error: ${error.message}`, 'error');
+            } finally {
+                sendButton.disabled = false;
+            }
+        }
+
+        async function acceptDeal() {
+            if (!currentOffer) return;
+            
+            addMessage('user', 'I accept the deal!');
+            await sendMessage();
+        }
+
+        async function rejectDeal() {
+            addMessage('user', 'No deal!');
+            await sendMessage();
+        }
+
+        // Check API health on load
+        async function checkHealth() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                console.log('API Health:', data);
+            } catch (error) {
+                console.error('API Health Check Failed:', error);
+                showStatus('API server is not running. Please start the banker API server.', 'error');
+            }
+        }
+
+        // Initialize
+        checkHealth();
+    </script>
+</body>
+</html>
