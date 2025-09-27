@@ -22,7 +22,7 @@ from metta.utils import LLM, process_query
 
 load_dotenv()
 
-agent = Agent(name="Financial Investment Advisor", port=8008, mailbox=True, publish_agent_details=True)
+agent = Agent(name="Banker agent", port=8008, mailbox=True, publish_agent_details=True)
 
 class InvestmentQuery(Model):
     query: str
