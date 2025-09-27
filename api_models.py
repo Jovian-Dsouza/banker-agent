@@ -2,15 +2,31 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 from uagents import Model
 
+# Base Models (define first to avoid circular dependencies)
+class GameState(Model):
+    """Game state information"""
+    game_id: str
+    round: int
+    remaining_cards: List[int]
+    burnt_cards: List[int]
+    selected_case: Optional[int] = None
+    current_offer: Optional[int] = None
+    expected_value: Optional[int] = None
+    house_edge: Optional[float] = None
+    status: str  # "active", "completed", "abandoned"
+
 # Request Models
 class StartGameRequest(Model):
     """Request to start a new game"""
-    pass
+    game_id: str
+    game_state: GameState
 
 class ChatRequest(Model):
     """Request to send a message to the banker"""
     message: str
-    game_id: Optional[str] = None
+    game_id: str
+    game_state: GameState
+    message_history: List[Dict[str, Any]]
 
 class GameStateRequest(Model):
     """Request to update game state"""
@@ -27,18 +43,6 @@ class DealActionRequest(Model):
     offer_amount: int
 
 # Response Models
-class GameState(Model):
-    """Game state information"""
-    game_id: str
-    round: int
-    remaining_cards: List[int]
-    burnt_cards: List[int]
-    selected_case: Optional[int] = None
-    current_offer: Optional[int] = None
-    expected_value: Optional[int] = None
-    house_edge: Optional[float] = None
-    status: str  # "active", "completed", "abandoned"
-
 class BankerResponse(Model):
     """Banker's response to player"""
     message: str

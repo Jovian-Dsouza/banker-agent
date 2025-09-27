@@ -77,14 +77,22 @@ def create_game_state_response(game_id: str, game_data: Dict[str, Any]) -> GameS
 
 @banker_agent.on_rest_post("/start-game", StartGameRequest, StartGameResponse)
 async def start_game(ctx: Context, req: StartGameRequest) -> StartGameResponse:
-    """Start a new Deal or No Deal game"""
+    """Start a new Deal or No Deal game with provided game state"""
     try:
-        # Generate new game ID
-        game_id = str(uuid4())
+        game_id = req.game_id
+        game_state = req.game_state
         
-        # Initialize game state
-        game_state = get_default_game_state()
-        active_games[game_id] = game_state
+        # Store the provided game state
+        active_games[game_id] = {
+            "round": game_state.round,
+            "remaining_cards": game_state.remaining_cards,
+            "burnt_cards": game_state.burnt_cards,
+            "selected_case": game_state.selected_case,
+            "current_offer": game_state.current_offer,
+            "expected_value": game_state.expected_value,
+            "house_edge": game_state.house_edge,
+            "status": game_state.status
+        }
         game_messages[game_id] = []
         
         # Process initial banker query
@@ -92,9 +100,9 @@ async def start_game(ctx: Context, req: StartGameRequest) -> StartGameResponse:
             "start game", 
             rag, 
             llm,
-            game_state["remaining_cards"],
-            game_state["burnt_cards"],
-            game_state["round"]
+            game_state.remaining_cards,
+            game_state.burnt_cards,
+            game_state.round
         )
         
         # Create banker response
@@ -139,20 +147,25 @@ async def chat_with_banker(ctx: Context, req: ChatRequest) -> ChatResponse:
     """Send a message to the banker and get response"""
     try:
         game_id = req.game_id
+        game_state = req.game_state
+        message_history = req.message_history
         
-        if game_id not in active_games:
-            return ChatResponse(
-                banker_response=BankerResponse(
-                    message="Game not found. Please start a new game.",
-                    game_state=GameState(game_id="", round=0, remaining_cards=[], burnt_cards=[], status="error")
-                ),
-                success=False,
-                error="Game not found"
-            )
+        # Update game state with provided data
+        active_games[game_id] = {
+            "round": game_state.round,
+            "remaining_cards": game_state.remaining_cards,
+            "burnt_cards": game_state.burnt_cards,
+            "selected_case": game_state.selected_case,
+            "current_offer": game_state.current_offer,
+            "expected_value": game_state.expected_value,
+            "house_edge": game_state.house_edge,
+            "status": game_state.status
+        }
         
-        game_data = active_games[game_id]
+        # Update message history
+        game_messages[game_id] = message_history
         
-        # Store user message
+        # Add current user message
         game_messages[game_id].append({
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "sender": "user",
@@ -165,9 +178,9 @@ async def chat_with_banker(ctx: Context, req: ChatRequest) -> ChatResponse:
             req.message, 
             rag, 
             llm,
-            game_data["remaining_cards"],
-            game_data["burnt_cards"],
-            game_data["round"]
+            game_state.remaining_cards,
+            game_state.burnt_cards,
+            game_state.round
         )
         
         # Check if player accepted/rejected deal
@@ -182,7 +195,7 @@ async def chat_with_banker(ctx: Context, req: ChatRequest) -> ChatResponse:
             message_type = "game_over"
         elif any(phrase in user_message_lower for phrase in deal_phrases):
             # Player accepted deal
-            offer_amount = game_data.get("current_offer", 0)
+            offer_amount = active_games[game_id].get("current_offer", 0)
             banker_message = f"**🎉 DEAL ACCEPTED! 🎉**\n\n💰 **You've won: ${offer_amount:,}**\n\n💬 **Congratulations! You made the smart choice and walked away with guaranteed money!**\n\n🎰 **Game Over - Thanks for playing!**"
             active_games[game_id]["status"] = "completed"
             message_type = "deal_accepted"
