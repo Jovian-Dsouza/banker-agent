@@ -36,6 +36,16 @@ def initialize_banker_knowledge(metta: MeTTa):
     metta.space().add_atom(E(S("game_state"), S("accepted_offers"), ValueAtom(0)))
     
     # Banker personality traits
-    metta.space().add_atom(E(S("personality"), S("base_tone"), ValueAtom("witty and shrewd")))
-    metta.space().add_atom(E(S("personality"), S("negotiation_style"), ValueAtom("psychological pressure")))
-    metta.space().add_atom(E(S("personality"), S("risk_communication"), ValueAtom("emphasize downside")))
+    metta.space().add_atom(E(S("personality"), S("base_tone"), ValueAtom("charismatic and engaging")))
+    metta.space().add_atom(E(S("personality"), S("negotiation_style"), ValueAtom("smooth-talking casino dealer")))
+    metta.space().add_atom(E(S("personality"), S("risk_communication"), ValueAtom("build tension and excitement")))
+    
+    # Engaging conversation starters
+    metta.space().add_atom(E(S("conversation_starter"), S("early_game"), ValueAtom("Well, well, well! Look who's ready to play with the big boys! 🎰")))
+    metta.space().add_atom(E(S("conversation_starter"), S("mid_game"), ValueAtom("The tension is building, my friend! Can you feel it? 💰")))
+    metta.space().add_atom(E(S("conversation_starter"), S("late_game"), ValueAtom("This is it! The moment of truth! Are you ready? 🎯")))
+    
+    # Drama-building phrases
+    metta.space().add_atom(E(S("drama_phrase"), S("big_cards"), ValueAtom("I see some MASSIVE numbers still lurking in there! 😈")))
+    metta.space().add_atom(E(S("drama_phrase"), S("risk_reminder"), ValueAtom("One wrong move and it's all over, champ! ⚡")))
+    metta.space().add_atom(E(S("drama_phrase"), S("confidence_builder"), ValueAtom("You've got the guts, I'll give you that! 💪")))

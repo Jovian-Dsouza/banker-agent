@@ -137,19 +137,57 @@ class BankerRAG:
         # Get base tone
         query_str = '!(match &self (personality base_tone $tone) $tone)'
         results = self.metta.run(query_str)
-        traits["base_tone"] = results[0][0].get_object().value if results and results[0] else "witty and shrewd"
+        traits["base_tone"] = results[0][0].get_object().value if results and results[0] else "charismatic and engaging"
         
         # Get negotiation style
         query_str = '!(match &self (personality negotiation_style $style) $style)'
         results = self.metta.run(query_str)
-        traits["negotiation_style"] = results[0][0].get_object().value if results and results[0] else "psychological pressure"
+        traits["negotiation_style"] = results[0][0].get_object().value if results and results[0] else "smooth-talking casino dealer"
         
         # Get risk communication
         query_str = '!(match &self (personality risk_communication $comm) $comm)'
         results = self.metta.run(query_str)
-        traits["risk_communication"] = results[0][0].get_object().value if results and results[0] else "emphasize downside"
+        traits["risk_communication"] = results[0][0].get_object().value if results and results[0] else "build tension and excitement"
         
         return traits
+
+    def get_conversation_starter(self, round_num: int) -> str:
+        """Get engaging conversation starter based on round."""
+        if round_num <= 2:
+            query_str = '!(match &self (conversation_starter early_game $starter) $starter)'
+        elif round_num <= 4:
+            query_str = '!(match &self (conversation_starter mid_game $starter) $starter)'
+        else:
+            query_str = '!(match &self (conversation_starter late_game $starter) $starter)'
+        
+        results = self.metta.run(query_str)
+        return results[0][0].get_object().value if results and results[0] else "Let's see what you're made of! 🎰"
+
+    def get_drama_phrase(self, phrase_type: str) -> str:
+        """Get drama-building phrase based on type."""
+        query_str = f'!(match &self (drama_phrase {phrase_type} $phrase) $phrase)'
+        results = self.metta.run(query_str)
+        return results[0][0].get_object().value if results and results[0] else "The stakes are high! 💰"
+
+    def create_engaging_context(self, remaining_cards: List[int], round_num: int, sentiment: str) -> str:
+        """Create engaging context for the LLM with drama and personality."""
+        # Get conversation starter
+        starter = self.get_conversation_starter(round_num)
+        
+        # Analyze remaining cards for drama
+        big_cards = [card for card in remaining_cards if card >= 100000]
+        medium_cards = [card for card in remaining_cards if 10000 <= card < 100000]
+        small_cards = [card for card in remaining_cards if card < 10000]
+        
+        drama_context = ""
+        if big_cards:
+            drama_context += f"🔥 MASSIVE cards still in play: {big_cards} - The tension is REAL! "
+        if medium_cards:
+            drama_context += f"💰 Decent numbers waiting: {medium_cards} - Not bad at all! "
+        if small_cards:
+            drama_context += f"💸 Some smaller amounts: {small_cards} - But hey, every dollar counts! "
+        
+        return f"{starter} {drama_context}What's your move, player? 🎯"
 
     def add_knowledge(self, relation_type, subject, object_value):
         """Add new banker knowledge dynamically."""
