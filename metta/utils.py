@@ -89,7 +89,7 @@ Always respond in JSON format:
 Player just said: "{user_message}"
 """
 
-    response = llm.create_completion(context, max_tokens=300)
+    response = llm.create_completion(context, max_tokens=400)
     
     try:
         # Try to parse JSON response
