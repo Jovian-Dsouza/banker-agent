@@ -7,13 +7,15 @@ class GameState(Model):
     """Game state information"""
     game_id: str
     round: int
-    remaining_cards: List[int]
-    burnt_cards: List[int]
-    selected_case: Optional[int] = None
+    remaining_boxes: List[int]  # Values still in play
+    burnt_boxes: List[int]  # Values eliminated
+    selected_box: Optional[int] = None  # Player's chosen box value
     current_offer: Optional[int] = None
     expected_value: Optional[int] = None
     house_edge: Optional[float] = None
     status: str  # "active", "completed", "abandoned"
+    entry_fee_paid: bool = False
+    max_offer_limit: int = 165  # Maximum offer allowed
 
 # Request Models
 class StartGameRequest(Model):
@@ -41,6 +43,22 @@ class DealActionRequest(Model):
     game_id: str
     action: str  # "accept" or "reject"
     offer_amount: int
+
+class EntryFeeRequest(Model):
+    """Request to pay entry fee"""
+    game_id: str
+    payment_amount: int  # Should be 5 PYUSD
+    payment_currency: str = "PYUSD"
+
+class AcceptDealRequest(Model):
+    """Request to accept a deal and cash out"""
+    game_id: str
+    offer_amount: int  # Must be <= $165
+
+class FinalSelectionRequest(Model):
+    """Request for final box selection"""
+    game_id: str
+    keep_original_box: bool  # True to keep original box, False to switch
 
 # Response Models
 class BankerResponse(Model):
@@ -72,6 +90,31 @@ class DealActionResponse(Model):
     message: str
     game_result: Optional[str] = None  # "won", "lost", "in_progress"
     final_amount: Optional[int] = None
+    error: Optional[str] = None
+
+class EntryFeeResponse(Model):
+    """Response to entry fee payment"""
+    success: bool
+    message: str
+    game_state: GameState
+    error: Optional[str] = None
+
+class AcceptDealResponse(Model):
+    """Response to accepting a deal"""
+    success: bool
+    message: str
+    final_amount: int
+    game_result: str = "completed"
+    error: Optional[str] = None
+
+class FinalSelectionResponse(Model):
+    """Response to final box selection"""
+    success: bool
+    message: str
+    final_amount: int
+    selected_box_value: int
+    other_box_value: int
+    game_result: str = "completed"
     error: Optional[str] = None
 
 class GameHistoryResponse(Model):

@@ -50,10 +50,10 @@ Your Character:
 🎯 **Psychology**: You're a master manipulator (in the best way!). You read people like open books and know exactly which buttons to push. You can sense desperation from a mile away, spot overconfidence before it even shows, and you're not afraid to play hardball when needed.
 
 Current Game State:
-- Remaining cards: {offer_data['cardsRemaining']}
+- Remaining boxes: {offer_data['cardsRemaining']}
 - Round: {offer_data['round']}
 - Expected Value: ${offer_data['expectedValue']}
-- Your calculated offer: ${offer_data['offer']}
+- Your calculated offer: ${offer_data['offer']} (max $165)
 - Player's vibe: {offer_data['sentiment']}
 - House edge: {offer_data['houseEdge']}
 - Drama context: {engaging_context}
@@ -66,11 +66,12 @@ Your Negotiation Playbook:
 😤 **For Aggressive Players**: "Whoa there, tiger! I've been doing this longer than you've been alive, and I don't respond well to threats. ${offer_data['offer']} is my final offer. Take it or leave it - but remember, the house always wins."
 
 🎲 **General Tactics**:
-- Reference specific remaining cards to build drama ("That $1,000,000 is still out there...")
-- Use storytelling ("I once had a player who turned down $500,000 and walked away with $1...")
+- Reference specific remaining boxes to build drama ("That $75 is still out there...")
+- Use storytelling ("I once had a player who turned down $50 and walked away with $1...")
 - Ask rhetorical questions ("Are you feeling lucky today?")
 - Create urgency ("This offer won't last forever...")
 - Use humor and wit to disarm tension
+- Remember: Maximum offer is $165!
 
 Response Rules:
 - Keep it to 2-4 sentences max
@@ -102,14 +103,14 @@ Player just said: "{user_message}"
             "offer": offer_data['offer']
         }
 
-def ai_decide_response_type(user_message: str, llm: LLM, remaining_cards: List[int], round_num: int) -> str:
+def ai_decide_response_type(user_message: str, llm: LLM, remaining_boxes: List[int], round_num: int) -> str:
     """Let the AI decide whether to make an offer or just have a conversation."""
     
     context = f"""
 You are a charismatic Banker in a Deal-or-No-Deal style game. You need to decide how to respond to the player's message.
 
 Context:
-- Remaining cards in play: {remaining_cards}
+- Remaining boxes in play: {remaining_boxes}
 - Round number: {round_num}
 - Player's message: "{user_message}"
 
@@ -138,11 +139,11 @@ Respond with ONLY one word: either "OFFER" or "CONVERSATION"
     return decision
 
 def generate_conversational_response(user_message: str, rag: BankerRAG, llm: LLM, 
-                                   remaining_cards: List[int], round_num: int) -> str:
+                                   remaining_boxes: List[int], round_num: int) -> str:
     """Generate a conversational response without making an offer."""
     
     # Create engaging context
-    engaging_context = rag.create_engaging_context(remaining_cards, round_num, "neutral")
+    engaging_context = rag.create_engaging_context(remaining_boxes, round_num, "neutral")
     
     context = f"""
 You are "The Banker" - the legendary master of the Deal or No Deal universe! 🎰 You're not just any banker; you're a charismatic storyteller, a psychological genius, and the coolest person in the room. Think of yourself as that friend who always has the best stories and knows exactly how to make any situation more interesting.
@@ -155,14 +156,14 @@ Your Character:
 🎯 **Psychology**: You're a master of reading people and situations. You know when to build tension, when to ease it, and how to keep players engaged without overwhelming them. You use humor, storytelling, and charm to create memorable moments.
 
 Current Situation:
-- Remaining cards: {remaining_cards}
+- Remaining boxes: {remaining_boxes}
 - Round: {round_num}
 - Context: {engaging_context}
 
 Your Conversational Arsenal:
-📚 **Storytelling**: "You know, I had a player last week who was in your exact position... they had the same cards, same round, everything. Want to know what happened to them?"
+📚 **Storytelling**: "You know, I had a player last week who was in your exact position... they had the same boxes, same round, everything. Want to know what happened to them?"
 
-🎪 **Drama Building**: "Look at those numbers still out there... that $1,000,000 is just sitting there, waiting for someone brave enough to go for it."
+🎪 **Drama Building**: "Look at those numbers still out there... that $75 is just sitting there, waiting for someone brave enough to go for it."
 
 😄 **Humor & Wit**: "Well, well, well... look who's back! I was starting to think you'd run off with my money and left me here talking to myself!"
 
@@ -175,7 +176,7 @@ Response Guidelines:
 - Be conversational and engaging
 - Use humor and wit when appropriate
 - Ask questions to keep them engaged
-- Reference specific cards for drama
+- Reference specific boxes for drama
 - Tell stories when they fit
 - Show your personality - be memorable!
 - Don't make any offers, just chat and build excitement
@@ -189,12 +190,12 @@ Respond conversationally (no offers, just engaging chat):
     return response.strip()
 
 def process_banker_query(user_message: str, rag: BankerRAG, llm: LLM, 
-                        remaining_cards: List[int], burnt_cards: List[int], 
+                        remaining_boxes: List[int], burnt_boxes: List[int], 
                         round_num: int) -> Dict[str, Any]:
     """Process banker negotiation query."""
     
     # Let the AI decide whether to make an offer or just chat
-    response_type = ai_decide_response_type(user_message, llm, remaining_cards, round_num)
+    response_type = ai_decide_response_type(user_message, llm, remaining_boxes, round_num)
     
     if response_type == "OFFER":
         # Analyze user sentiment
@@ -202,11 +203,11 @@ def process_banker_query(user_message: str, rag: BankerRAG, llm: LLM,
         print(f"Player sentiment: {sentiment}")
         
         # Calculate base offer using MeTTa rules
-        offer_data = rag.calculate_base_offer(remaining_cards, round_num, sentiment)
+        offer_data = rag.calculate_base_offer(remaining_boxes, round_num, sentiment)
         print(f"Offer calculation: {offer_data}")
         
         # Update game state
-        rag.update_game_state(round_num, remaining_cards, burnt_cards, offer_data['offer'])
+        rag.update_game_state(round_num, remaining_boxes, burnt_boxes, offer_data['offer'])
         
         # Generate banker response with offer
         banker_response = generate_banker_response(offer_data, user_message, llm, rag)
@@ -220,7 +221,7 @@ def process_banker_query(user_message: str, rag: BankerRAG, llm: LLM,
             "offer": banker_response['offer'],
             "game_state": {
                 "round": round_num,
-                "remaining_cards": remaining_cards,
+                "remaining_boxes": remaining_boxes,
                 "expected_value": offer_data['expectedValue'],
                 "house_edge": offer_data['houseEdge'],
                 "sentiment": sentiment
@@ -231,7 +232,7 @@ def process_banker_query(user_message: str, rag: BankerRAG, llm: LLM,
         print(f"Having conversation with player: {user_message}")
         
         # Generate conversational response
-        conversation_response = generate_conversational_response(user_message, rag, llm, remaining_cards, round_num)
+        conversation_response = generate_conversational_response(user_message, rag, llm, remaining_boxes, round_num)
         
         return {
             "selected_question": "Banker's conversation",
@@ -239,7 +240,7 @@ def process_banker_query(user_message: str, rag: BankerRAG, llm: LLM,
             "offer": None,  # No offer made
             "game_state": {
                 "round": round_num,
-                "remaining_cards": remaining_cards,
+                "remaining_boxes": remaining_boxes,
                 "expected_value": None,
                 "house_edge": None,
                 "sentiment": "conversational"
@@ -288,7 +289,7 @@ Your Character:
 🎯 **Psychology**: You're a master of reading people and situations. You know when to build tension, when to ease it, and how to keep players engaged without overwhelming them. You use humor, storytelling, and charm to create memorable moments.
 
 Key Rules:
-1. Always offer less than the Expected Value (EV) of remaining cards
+1. Always offer less than the Expected Value (EV) of remaining boxes
 2. Maintain house edge: 35% early rounds, 25% mid rounds, 15% late rounds
 3. Adjust offers based on player sentiment:
    - Confident players: slightly higher offers to keep them engaged
@@ -297,11 +298,13 @@ Key Rules:
 4. Use psychological pressure tactics appropriate to the round
 5. Keep messages engaging and conversational (2-4 sentences)
 6. Be charismatic, witty, and charming
+7. Maximum offer is $165 - never exceed this limit!
+8. Game has 8 boxes with values: $1, $2, $4, $8, $15, $22, $38, $75
 
 Your Conversational Arsenal:
-📚 **Storytelling**: "You know, I had a player last week who was in your exact position... they had the same cards, same round, everything. Want to know what happened to them?"
+📚 **Storytelling**: "You know, I had a player last week who was in your exact position... they had the same boxes, same round, everything. Want to know what happened to them?"
 
-🎪 **Drama Building**: "Look at those numbers still out there... that $1,000,000 is just sitting there, waiting for someone brave enough to go for it."
+🎪 **Drama Building**: "Look at those numbers still out there... that $75 is just sitting there, waiting for someone brave enough to go for it."
 
 😄 **Humor & Wit**: "Well, well, well... look who's back! I was starting to think you'd run off with my money and left me here talking to myself!"
 
@@ -314,7 +317,7 @@ Response Guidelines:
 - Be conversational and engaging
 - Use humor and wit when appropriate
 - Ask questions to keep them engaged
-- Reference specific cards for drama
+- Reference specific boxes for drama
 - Tell stories when they fit
 - Show your personality - be memorable!
 

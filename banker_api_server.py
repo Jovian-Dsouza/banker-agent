@@ -27,6 +27,8 @@ from metta.utils import LLM, process_banker_query, extract_game_state_from_messa
 from api_models import (
     StartGameRequest, StartGameResponse, ChatRequest, ChatResponse,
     GameStateRequest, DealActionRequest, DealActionResponse,
+    EntryFeeRequest, EntryFeeResponse, AcceptDealRequest, AcceptDealResponse,
+    FinalSelectionRequest, FinalSelectionResponse,
     GameHistoryResponse, HealthResponse, ErrorResponse,
     GameState, BankerResponse, ActiveGamesResponse
 )
@@ -49,28 +51,32 @@ game_messages: Dict[str, list] = {}
 def get_default_game_state() -> Dict[str, Any]:
     """Get default game state for new games."""
     return {
-        "round": 1,
-        "remaining_cards": [1, 5, 10, 25, 50, 100, 500, 1000, 2500, 5000, 10000, 25000, 50000, 75000, 100000, 200000, 300000, 400000, 500000, 750000, 1000000],
-        "burnt_cards": [],
-        "selected_case": None,
+        "round": 0,  # Start at 0, increment after each elimination
+        "remaining_boxes": [1, 2, 4, 8, 15, 22, 38, 75],  # 8 boxes with specific values
+        "burnt_boxes": [],
+        "selected_box": None,  # Player's chosen box value
         "current_offer": None,
         "expected_value": None,
         "house_edge": None,
-        "status": "active"
+        "status": "pending_entry_fee",  # Must pay entry fee first
+        "entry_fee_paid": False,
+        "max_offer_limit": 165
     }
 
 def create_game_state_response(game_id: str, game_data: Dict[str, Any]) -> GameState:
     """Create GameState response from game data."""
     return GameState(
         game_id=game_id,
-        round=game_data.get("round", 1),
-        remaining_cards=game_data.get("remaining_cards", []),
-        burnt_cards=game_data.get("burnt_cards", []),
-        selected_case=game_data.get("selected_case"),
+        round=game_data.get("round", 0),
+        remaining_boxes=game_data.get("remaining_boxes", []),
+        burnt_boxes=game_data.get("burnt_boxes", []),
+        selected_box=game_data.get("selected_box"),
         current_offer=game_data.get("current_offer"),
         expected_value=game_data.get("expected_value"),
         house_edge=game_data.get("house_edge"),
-        status=game_data.get("status", "active")
+        status=game_data.get("status", "pending_entry_fee"),
+        entry_fee_paid=game_data.get("entry_fee_paid", False),
+        max_offer_limit=game_data.get("max_offer_limit", 165)
     )
 
 # REST API Endpoints
@@ -85,43 +91,27 @@ async def start_game(ctx: Context, req: StartGameRequest) -> StartGameResponse:
         # Store the provided game state
         active_games[game_id] = {
             "round": game_state.round,
-            "remaining_cards": game_state.remaining_cards,
-            "burnt_cards": game_state.burnt_cards,
-            "selected_case": game_state.selected_case,
+            "remaining_boxes": game_state.remaining_boxes,
+            "burnt_boxes": game_state.burnt_boxes,
+            "selected_box": game_state.selected_box,
             "current_offer": game_state.current_offer,
             "expected_value": game_state.expected_value,
             "house_edge": game_state.house_edge,
-            "status": game_state.status
+            "status": game_state.status,
+            "entry_fee_paid": game_state.entry_fee_paid,
+            "max_offer_limit": game_state.max_offer_limit
         }
         game_messages[game_id] = []
         
-        # Process initial banker query
-        response = process_banker_query(
-            "start game", 
-            rag, 
-            llm,
-            game_state.remaining_cards,
-            game_state.burnt_cards,
-            game_state.round
-        )
-        
-        # Create banker response
-        if isinstance(response, dict) and response.get('offer') is not None:
-            banker_message = f"**🎯 Round {response['game_state']['round']} Offer**\n\n💰 **My Offer: ${response['offer']:,}**\n\n💬 **{response['humanized_answer']}**"
-            
-            # Update game state with offer
-            active_games[game_id]["current_offer"] = response['offer']
-            active_games[game_id]["expected_value"] = response['game_state']['expected_value']
-            active_games[game_id]["house_edge"] = response['game_state']['house_edge']
-        else:
-            banker_message = f"**💬 {response['humanized_answer']}**"
+        # Initial banker message for new game
+        banker_message = "**🎰 Welcome to Deal or No Deal! 🎰**\n\n💰 **Entry Fee: $5 PYUSD**\n\n🎯 **Game Setup:**\n- 8 boxes with values: $1, $2, $4, $8, $15, $22, $38, $75\n- Select 1 box to keep (hidden)\n- Eliminate 6 boxes over 6 rounds\n- Final choice: keep your box or switch to the last remaining box\n\n💡 **Pay the entry fee to begin!**"
         
         # Store initial message
         game_messages[game_id].append({
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "sender": "banker",
             "message": banker_message,
-            "message_type": "offer" if response.get('offer') else "conversation"
+            "message_type": "game_intro"
         })
         
         ctx.logger.info(f"Started new game: {game_id}")
@@ -136,7 +126,7 @@ async def start_game(ctx: Context, req: StartGameRequest) -> StartGameResponse:
         ctx.logger.error(f"Error starting game: {e}")
         return StartGameResponse(
             game_id="",
-            game_state=GameState(game_id="", round=0, remaining_cards=[], burnt_cards=[], status="error"),
+            game_state=GameState(game_id="", round=0, remaining_boxes=[], burnt_boxes=[], status="error"),
             banker_message="",
             success=False,
             error=f"Failed to start game: {str(e)}"
@@ -153,13 +143,15 @@ async def chat_with_banker(ctx: Context, req: ChatRequest) -> ChatResponse:
         # Update game state with provided data
         active_games[game_id] = {
             "round": game_state.round,
-            "remaining_cards": game_state.remaining_cards,
-            "burnt_cards": game_state.burnt_cards,
-            "selected_case": game_state.selected_case,
+            "remaining_boxes": game_state.remaining_boxes,
+            "burnt_boxes": game_state.burnt_boxes,
+            "selected_box": game_state.selected_box,
             "current_offer": game_state.current_offer,
             "expected_value": game_state.expected_value,
             "house_edge": game_state.house_edge,
-            "status": game_state.status
+            "status": game_state.status,
+            "entry_fee_paid": game_state.entry_fee_paid,
+            "max_offer_limit": game_state.max_offer_limit
         }
         
         # Update message history
@@ -178,8 +170,8 @@ async def chat_with_banker(ctx: Context, req: ChatRequest) -> ChatResponse:
             req.message, 
             rag, 
             llm,
-            game_state.remaining_cards,
-            game_state.burnt_cards,
+            game_state.remaining_boxes,
+            game_state.burnt_boxes,
             game_state.round
         )
         
@@ -353,6 +345,201 @@ async def health_check(ctx: Context) -> HealthResponse:
         agent="banker_api_agent",
         timestamp=datetime.now(timezone.utc).isoformat()
     )
+
+@banker_agent.on_rest_post("/pay-entry-fee", EntryFeeRequest, EntryFeeResponse)
+async def pay_entry_fee(ctx: Context, req: EntryFeeRequest) -> EntryFeeResponse:
+    """Pay the $5 PYUSD entry fee to start the game"""
+    try:
+        if req.game_id not in active_games:
+            return EntryFeeResponse(
+                success=False,
+                message="Game not found.",
+                game_state=GameState(game_id="", round=0, remaining_boxes=[], burnt_boxes=[], status="error"),
+                error="Game not found"
+            )
+        
+        if req.payment_amount != 5 or req.payment_currency != "PYUSD":
+            return EntryFeeResponse(
+                success=False,
+                message="Invalid payment amount or currency. Must be 5 PYUSD.",
+                game_state=create_game_state_response(req.game_id, active_games[req.game_id]),
+                error="Invalid payment"
+            )
+        
+        # Update game state
+        active_games[req.game_id]["entry_fee_paid"] = True
+        active_games[req.game_id]["status"] = "active"
+        
+        # Create banker response
+        banker_message = "**🎉 Entry fee received! Game is now active! 🎉**\n\n🎯 **Select your box!** Choose one of the 8 boxes to keep:\n- Box 1: $1\n- Box 2: $2\n- Box 3: $4\n- Box 4: $8\n- Box 5: $15\n- Box 6: $22\n- Box 7: $38\n- Box 8: $75\n\n💡 **Tell me which box number you want to keep!**"
+        
+        # Store message
+        game_messages[req.game_id].append({
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "sender": "banker",
+            "message": banker_message,
+            "message_type": "box_selection"
+        })
+        
+        ctx.logger.info(f"Entry fee paid for game: {req.game_id}")
+        
+        return EntryFeeResponse(
+            success=True,
+            message="Entry fee paid successfully!",
+            game_state=create_game_state_response(req.game_id, active_games[req.game_id])
+        )
+        
+    except Exception as e:
+        ctx.logger.error(f"Error processing entry fee: {e}")
+        return EntryFeeResponse(
+            success=False,
+            message="Error processing entry fee.",
+            game_state=GameState(game_id=req.game_id, round=0, remaining_boxes=[], burnt_boxes=[], status="error"),
+            error=f"Failed to process entry fee: {str(e)}"
+        )
+
+@banker_agent.on_rest_post("/accept-deal", AcceptDealRequest, AcceptDealResponse)
+async def accept_deal(ctx: Context, req: AcceptDealRequest) -> AcceptDealResponse:
+    """Accept a deal and cash out early"""
+    try:
+        if req.game_id not in active_games:
+            return AcceptDealResponse(
+                success=False,
+                message="Game not found.",
+                final_amount=0,
+                error="Game not found"
+            )
+        
+        game_data = active_games[req.game_id]
+        
+        if not game_data.get("entry_fee_paid", False):
+            return AcceptDealResponse(
+                success=False,
+                message="Entry fee not paid. Cannot accept deals.",
+                final_amount=0,
+                error="Entry fee required"
+            )
+        
+        if req.offer_amount > game_data.get("max_offer_limit", 165):
+            return AcceptDealResponse(
+                success=False,
+                message=f"Offer amount ${req.offer_amount} exceeds maximum limit of ${game_data.get('max_offer_limit', 165)}.",
+                final_amount=0,
+                error="Offer amount too high"
+            )
+        
+        # Complete the game
+        active_games[req.game_id]["status"] = "completed"
+        active_games[req.game_id]["current_offer"] = req.offer_amount
+        
+        banker_message = f"**🎉 DEAL ACCEPTED! 🎉**\n\n💰 **You've won: ${req.offer_amount:,}**\n\n💬 **Congratulations! You made the smart choice and walked away with guaranteed money!**\n\n🎰 **Game Over - Thanks for playing!**"
+        
+        # Store message
+        game_messages[req.game_id].append({
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "sender": "banker",
+            "message": banker_message,
+            "message_type": "deal_accepted"
+        })
+        
+        ctx.logger.info(f"Deal accepted for game {req.game_id}: ${req.offer_amount}")
+        
+        return AcceptDealResponse(
+            success=True,
+            message="Deal accepted successfully!",
+            final_amount=req.offer_amount
+        )
+        
+    except Exception as e:
+        ctx.logger.error(f"Error accepting deal: {e}")
+        return AcceptDealResponse(
+            success=False,
+            message="Error accepting deal.",
+            final_amount=0,
+            error=f"Failed to accept deal: {str(e)}"
+        )
+
+@banker_agent.on_rest_post("/final-selection", FinalSelectionRequest, FinalSelectionResponse)
+async def final_selection(ctx: Context, req: FinalSelectionRequest) -> FinalSelectionResponse:
+    """Make final box selection when only 2 boxes remain"""
+    try:
+        if req.game_id not in active_games:
+            return FinalSelectionResponse(
+                success=False,
+                message="Game not found.",
+                final_amount=0,
+                selected_box_value=0,
+                other_box_value=0,
+                error="Game not found"
+            )
+        
+        game_data = active_games[req.game_id]
+        
+        if len(game_data.get("remaining_boxes", [])) != 2:
+            return FinalSelectionResponse(
+                success=False,
+                message="Final selection can only be made when exactly 2 boxes remain.",
+                final_amount=0,
+                selected_box_value=0,
+                other_box_value=0,
+                error="Invalid game state for final selection"
+            )
+        
+        remaining_boxes = game_data["remaining_boxes"]
+        selected_box_value = game_data.get("selected_box")
+        
+        if not selected_box_value:
+            return FinalSelectionResponse(
+                success=False,
+                message="No box selected. Cannot make final selection.",
+                final_amount=0,
+                selected_box_value=0,
+                other_box_value=0,
+                error="No box selected"
+            )
+        
+        # Determine the other box value
+        other_box_value = [box for box in remaining_boxes if box != selected_box_value][0]
+        
+        # Determine final amount based on selection
+        if req.keep_original_box:
+            final_amount = selected_box_value
+            banker_message = f"**🎯 You kept your original box!**\n\n💰 **Your box contained: ${selected_box_value:,}**\n\n🎁 **The other box had: ${other_box_value:,}**\n\n🎉 **Final Result: You won ${final_amount:,}!**"
+        else:
+            final_amount = other_box_value
+            banker_message = f"**🎯 You switched to the other box!**\n\n💰 **The other box contained: ${other_box_value:,}**\n\n🎁 **Your original box had: ${selected_box_value:,}**\n\n🎉 **Final Result: You won ${final_amount:,}!**"
+        
+        # Complete the game
+        active_games[req.game_id]["status"] = "completed"
+        
+        # Store message
+        game_messages[req.game_id].append({
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "sender": "banker",
+            "message": banker_message,
+            "message_type": "final_result"
+        })
+        
+        ctx.logger.info(f"Final selection made for game {req.game_id}: ${final_amount}")
+        
+        return FinalSelectionResponse(
+            success=True,
+            message="Final selection completed!",
+            final_amount=final_amount,
+            selected_box_value=selected_box_value,
+            other_box_value=other_box_value
+        )
+        
+    except Exception as e:
+        ctx.logger.error(f"Error processing final selection: {e}")
+        return FinalSelectionResponse(
+            success=False,
+            message="Error processing final selection.",
+            final_amount=0,
+            selected_box_value=0,
+            other_box_value=0,
+            error=f"Failed to process final selection: {str(e)}"
+        )
 
 @banker_agent.on_rest_get("/active-games", ActiveGamesResponse)
 async def get_active_games(ctx: Context) -> ActiveGamesResponse:
