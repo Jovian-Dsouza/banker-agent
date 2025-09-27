@@ -87,19 +87,36 @@ async def handle_message(ctx: Context, sender: str, msg: ChatMessage):
     for item in msg.content:
         if isinstance(item, StartSessionContent):
             ctx.logger.info(f"Got a start session message from {sender}")
-            # Send welcome message
-            welcome_msg = """🎰 Welcome to Deal or no deal! 🎰
-
-I'm the Banker, and I'm here to make you offers you can't refuse... or can you?
-
-To get started, tell me about your game state. For example:
-- "Round 1, remaining cards: [1, 5, 10, 25, 50, 100, 500, 1000, 2500, 5000, 10000, 25000, 50000, 75000, 100000, 200000, 300000, 400000, 500000, 750000, 1000000]"
-- "I'm confident, round 2, cards left: [100, 500, 1000, 5000, 10000, 25000, 100000, 500000, 1000000]"
-
-Or just say something like "Make me an offer" and I'll use a default game state.
-
-Remember: The house always wins! 😈"""
-            await ctx.send(sender, create_text_chat(welcome_msg))
+            # Start directly with round 1 offer using default game state
+            game_state = get_default_game_state()
+            
+            try:
+                # Process banker query with default game state
+                response = process_banker_query(
+                    "start game", 
+                    rag, 
+                    llm,
+                    game_state["remaining_cards"],
+                    game_state["burnt_cards"],
+                    game_state["round"]
+                )
+                
+                # Format response for negotiation
+                if isinstance(response, dict):
+                    answer_text = f"**🎯 Round {response['game_state']['round']} Offer**\n\n"
+                    answer_text += f"💰 **My Offer: ${response['offer']:,}**\n\n"
+                    answer_text += f"💬 **{response['humanized_answer']}**"
+                else:
+                    answer_text = str(response)
+                
+                await ctx.send(sender, create_text_chat(answer_text))
+                
+            except Exception as e:
+                ctx.logger.error(f"Error processing initial banker query: {e}")
+                await ctx.send(
+                    sender, 
+                    create_text_chat("I apologize, but I encountered an error starting the game. Please try again.")
+                )
             continue
         elif isinstance(item, TextContent):
             user_message = item.text.strip()
