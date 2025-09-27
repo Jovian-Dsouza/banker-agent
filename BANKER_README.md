@@ -155,7 +155,7 @@ uv run python simple_test.py
 
 💬 You've got quite the spread there. My offer is $2,024 - take the guaranteed money or risk it all for a single buck!
 
-🧠 Psychology: The house always wins in the end.
+🧠 Psychology: Maintains tension and excitement throughout the game.
 
 📊 Game State:
    • Expected Value: $3,320

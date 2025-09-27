@@ -103,9 +103,14 @@ async def handle_message(ctx: Context, sender: str, msg: ChatMessage):
                 
                 # Format response for negotiation
                 if isinstance(response, dict):
-                    answer_text = f"**🎯 Round {response['game_state']['round']} Offer**\n\n"
-                    answer_text += f"💰 **My Offer: ${response['offer']:,}**\n\n"
-                    answer_text += f"💬 **{response['humanized_answer']}**"
+                    if response.get('offer') is not None:
+                        # This is an offer response
+                        answer_text = f"**🎯 Round {response['game_state']['round']} Offer**\n\n"
+                        answer_text += f"💰 **My Offer: ${response['offer']:,}**\n\n"
+                        answer_text += f"💬 **{response['humanized_answer']}**"
+                    else:
+                        # This is a conversational response
+                        answer_text = f"**💬 {response['humanized_answer']}**"
                 else:
                     answer_text = str(response)
                 
@@ -145,19 +150,24 @@ async def handle_message(ctx: Context, sender: str, msg: ChatMessage):
                 if rejects_deal:
                     # Player explicitly rejected
                     answer_text = f"**❌ Deal Rejected**\n\n"
-                    answer_text += f"💬 **Your loss! The house always wins in the end. Better luck next time!**\n\n"
+                    answer_text += f"💬 **Your loss! Better luck next time!**\n\n"
                     answer_text += f"🎰 **Game Over - Thanks for playing!**"
                 elif any(phrase in user_message_lower for phrase in deal_phrases):
                     answer_text = f"**🎉 DEAL ACCEPTED! 🎉**\n\n"
                     answer_text += f"💰 **You've won: ${response['offer']:,}**\n\n"
-                    answer_text += f"💬 **Congratulations! You made the smart choice. The house always wins, but you played it safe and walked away with guaranteed money.**\n\n"
+                    answer_text += f"💬 **Congratulations! You made the smart choice and walked away with guaranteed money!**\n\n"
                     answer_text += f"🎰 **Game Over - Thanks for playing!**"
                 else:
                     # Format response for negotiation
                     if isinstance(response, dict):
-                        answer_text = f"**🎯 Round {response['game_state']['round']} Offer**\n\n"
-                        answer_text += f"💰 **My Offer: ${response['offer']:,}**\n\n"
-                        answer_text += f"💬 **{response['humanized_answer']}**"
+                        if response.get('offer') is not None:
+                            # This is an offer response
+                            answer_text = f"**🎯 Round {response['game_state']['round']} Offer**\n\n"
+                            answer_text += f"💰 **My Offer: ${response['offer']:,}**\n\n"
+                            answer_text += f"💬 **{response['humanized_answer']}**"
+                        else:
+                            # This is a conversational response
+                            answer_text = f"**💬 {response['humanized_answer']}**"
                     else:
                         answer_text = str(response)
                 

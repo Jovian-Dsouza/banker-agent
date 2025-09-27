@@ -99,40 +99,139 @@ Player's message: "{user_message}"
             "offer": offer_data['offer']
         }
 
+def ai_decide_response_type(user_message: str, llm: LLM, remaining_cards: List[int], round_num: int) -> str:
+    """Let the AI decide whether to make an offer or just have a conversation."""
+    
+    context = f"""
+You are a charismatic Banker in a Deal-or-No-Deal style game. You need to decide how to respond to the player's message.
+
+Context:
+- Remaining cards in play: {remaining_cards}
+- Round number: {round_num}
+- Player's message: "{user_message}"
+
+You must decide whether to:
+1. Make a formal offer (when player is ready to negotiate, asking for money, or it's time for a new round)
+2. Just have a casual conversation (when player is greeting, chatting, or not ready to negotiate)
+
+Consider these factors:
+- If player is greeting or making small talk → CONVERSATION
+- If player is asking for money, offers, or ready to negotiate → OFFER
+- If it's early in the game and player seems unsure → CONVERSATION
+- If player is being aggressive or demanding → OFFER
+- If player is just expressing emotions or thoughts → CONVERSATION
+
+Respond with ONLY one word: either "OFFER" or "CONVERSATION"
+"""
+    
+    response = llm.create_completion(context, max_tokens=10)
+    decision = response.strip().upper()
+    
+    # Fallback to conversation if AI response is unclear
+    if decision not in ["OFFER", "CONVERSATION"]:
+        decision = "CONVERSATION"
+    
+    print(f"AI decided response type: {decision} for message: '{user_message}'")
+    return decision
+
+def generate_conversational_response(user_message: str, rag: BankerRAG, llm: LLM, 
+                                   remaining_cards: List[int], round_num: int) -> str:
+    """Generate a conversational response without making an offer."""
+    
+    # Create engaging context
+    engaging_context = rag.create_engaging_context(remaining_cards, round_num, "neutral")
+    
+    context = f"""
+You are a charismatic, engaging Banker in a high-stakes Deal-or-No-Deal style game. You're like a smooth-talking casino dealer who knows how to work the crowd and keep players engaged.
+
+Context provided:
+- Remaining cards in play: {remaining_cards}
+- Round number: {round_num}
+- Engaging context: {engaging_context}
+
+Your personality:
+- Charismatic and engaging like a TV game show host
+- Witty, charming, and slightly mischievous
+- Use psychological tactics to build tension and excitement
+- Reference the remaining cards to create drama
+- Ask rhetorical questions to engage the player
+- Use emojis and expressive language
+- Build anticipation and make the player feel special
+
+Response style:
+- 1-3 sentences maximum
+- Use engaging, conversational tone
+- Reference specific remaining cards for drama
+- Ask questions to keep them engaged
+- Use psychological pressure tactics
+- Be like a charismatic TV host
+- Don't make any offers, just chat and build excitement
+
+Player's message: "{user_message}"
+
+Respond conversationally without making any offers:
+"""
+    
+    response = llm.create_completion(context, max_tokens=200)
+    return response.strip()
+
 def process_banker_query(user_message: str, rag: BankerRAG, llm: LLM, 
                         remaining_cards: List[int], burnt_cards: List[int], 
                         round_num: int) -> Dict[str, Any]:
     """Process banker negotiation query."""
     
-    # Analyze user sentiment
-    sentiment = rag.analyze_user_behavior(user_message)
-    print(f"Player sentiment: {sentiment}")
+    # Let the AI decide whether to make an offer or just chat
+    response_type = ai_decide_response_type(user_message, llm, remaining_cards, round_num)
     
-    # Calculate base offer using MeTTa rules
-    offer_data = rag.calculate_base_offer(remaining_cards, round_num, sentiment)
-    print(f"Offer calculation: {offer_data}")
-    
-    # Update game state
-    rag.update_game_state(round_num, remaining_cards, burnt_cards, offer_data['offer'])
-    
-    # Generate banker response
-    banker_response = generate_banker_response(offer_data, user_message, llm, rag)
-    
-    # Ensure offer matches calculated offer
-    banker_response['offer'] = offer_data['offer']
-    
-    return {
-        "selected_question": f"Banker's offer for Round {round_num}",
-        "humanized_answer": banker_response['message'],
-        "offer": banker_response['offer'],
-        "game_state": {
-            "round": round_num,
-            "remaining_cards": remaining_cards,
-            "expected_value": offer_data['expectedValue'],
-            "house_edge": offer_data['houseEdge'],
-            "sentiment": sentiment
+    if response_type == "OFFER":
+        # Analyze user sentiment
+        sentiment = rag.analyze_user_behavior(user_message)
+        print(f"Player sentiment: {sentiment}")
+        
+        # Calculate base offer using MeTTa rules
+        offer_data = rag.calculate_base_offer(remaining_cards, round_num, sentiment)
+        print(f"Offer calculation: {offer_data}")
+        
+        # Update game state
+        rag.update_game_state(round_num, remaining_cards, burnt_cards, offer_data['offer'])
+        
+        # Generate banker response with offer
+        banker_response = generate_banker_response(offer_data, user_message, llm, rag)
+        
+        # Ensure offer matches calculated offer
+        banker_response['offer'] = offer_data['offer']
+        
+        return {
+            "selected_question": f"Banker's offer for Round {round_num}",
+            "humanized_answer": banker_response['message'],
+            "offer": banker_response['offer'],
+            "game_state": {
+                "round": round_num,
+                "remaining_cards": remaining_cards,
+                "expected_value": offer_data['expectedValue'],
+                "house_edge": offer_data['houseEdge'],
+                "sentiment": sentiment
+            }
         }
-    }
+    else:
+        # Just have a conversation without making an offer
+        print(f"Having conversation with player: {user_message}")
+        
+        # Generate conversational response
+        conversation_response = generate_conversational_response(user_message, rag, llm, remaining_cards, round_num)
+        
+        return {
+            "selected_question": "Banker's conversation",
+            "humanized_answer": conversation_response,
+            "offer": None,  # No offer made
+            "game_state": {
+                "round": round_num,
+                "remaining_cards": remaining_cards,
+                "expected_value": None,
+                "house_edge": None,
+                "sentiment": "conversational"
+            }
+        }
 
 def extract_game_state_from_message(user_message: str) -> Optional[Dict[str, Any]]:
     """Extract game state information from user message if provided."""

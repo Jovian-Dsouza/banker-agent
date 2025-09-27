@@ -76,12 +76,12 @@ def test_response_formatting():
     
     if rejects_deal:
         answer_text = f"**❌ Deal Rejected**\n\n"
-        answer_text += f"💬 **Your loss! The house always wins in the end. Better luck next time!**\n\n"
+        answer_text += f"💬 **Your loss! Better luck next time!**\n\n"
         answer_text += f"🎰 **Game Over - Thanks for playing!**"
     elif any(phrase in user_message_lower for phrase in deal_phrases):
         answer_text = f"**🎉 DEAL ACCEPTED! 🎉**\n\n"
         answer_text += f"💰 **You've won: ${mock_response['offer']:,}**\n\n"
-        answer_text += f"💬 **Congratulations! You made the smart choice. The house always wins, but you played it safe and walked away with guaranteed money.**\n\n"
+        answer_text += f"💬 **Congratulations! You made the smart choice and walked away with guaranteed money!**\n\n"
         answer_text += f"🎰 **Game Over - Thanks for playing!**"
     else:
         answer_text = f"**🎯 Round {mock_response['game_state']['round']} Offer**\n\n"
@@ -100,12 +100,12 @@ def test_response_formatting():
     
     if rejects_deal:
         answer_text = f"**❌ Deal Rejected**\n\n"
-        answer_text += f"💬 **Your loss! The house always wins in the end. Better luck next time!**\n\n"
+        answer_text += f"💬 **Your loss! Better luck next time!**\n\n"
         answer_text += f"🎰 **Game Over - Thanks for playing!**"
     elif any(phrase in user_message_lower for phrase in deal_phrases):
         answer_text = f"**🎉 DEAL ACCEPTED! 🎉**\n\n"
         answer_text += f"💰 **You've won: ${mock_response['offer']:,}**\n\n"
-        answer_text += f"💬 **Congratulations! You made the smart choice. The house always wins, but you played it safe and walked away with guaranteed money.**\n\n"
+        answer_text += f"💬 **Congratulations! You made the smart choice and walked away with guaranteed money!**\n\n"
         answer_text += f"🎰 **Game Over - Thanks for playing!**"
     else:
         answer_text = f"**🎯 Round {mock_response['game_state']['round']} Offer**\n\n"
@@ -124,12 +124,12 @@ def test_response_formatting():
     
     if rejects_deal:
         answer_text = f"**❌ Deal Rejected**\n\n"
-        answer_text += f"💬 **Your loss! The house always wins in the end. Better luck next time!**\n\n"
+        answer_text += f"💬 **Your loss! Better luck next time!**\n\n"
         answer_text += f"🎰 **Game Over - Thanks for playing!**"
     elif any(phrase in user_message_lower for phrase in deal_phrases):
         answer_text = f"**🎉 DEAL ACCEPTED! 🎉**\n\n"
         answer_text += f"💰 **You've won: ${mock_response['offer']:,}**\n\n"
-        answer_text += f"💬 **Congratulations! You made the smart choice. The house always wins, but you played it safe and walked away with guaranteed money.**\n\n"
+        answer_text += f"💬 **Congratulations! You made the smart choice and walked away with guaranteed money!**\n\n"
         answer_text += f"🎰 **Game Over - Thanks for playing!**"
     else:
         answer_text = f"**🎯 Round {mock_response['game_state']['round']} Offer**\n\n"
