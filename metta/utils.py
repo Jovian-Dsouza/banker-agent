@@ -1,6 +1,7 @@
 import json
+from typing import List, Dict, Any, Optional
 from openai import OpenAI
-from .investment_rag import InvestmentRAG
+from .banker_rag import BankerRAG
 
 class LLM:
     def __init__(self, api_key):
@@ -17,206 +18,162 @@ class LLM:
         )
         return completion.choices[0].message.content
 
-def get_intent_and_keyword(query, llm):
-    """Use ASI:One API to classify investment intent and extract a keyword."""
+def analyze_user_sentiment(user_message: str, llm: LLM) -> str:
+    """Analyze user message to determine sentiment using LLM."""
     prompt = (
-        f"Given the investment query: '{query}'\n"
-        "Classify the intent as one of: 'risk_profile', 'investment_advice', 'returns', 'allocation', 'goal', 'sector', 'mistake', 'faq', or 'unknown'.\n"
-        "Extract the most relevant keyword (e.g., conservative, aggressive, retirement, technology, bonds) from the query.\n"
-        "Return *only* the result in JSON format like this, with no additional text:\n"
-        "{\n"
-        "  \"intent\": \"<classified_intent>\",\n"
-        "  \"keyword\": \"<extracted_keyword>\"\n"
-        "}"
+        f"Analyze the sentiment of this message: '{user_message}'\n"
+        "Classify as one of: 'confident', 'desperate', 'aggressive', or 'neutral'.\n"
+        "Return *only* the classification word, no additional text."
     )
-    response = llm.create_completion(prompt)
-    try:
-        result = json.loads(response)
-        return result["intent"], result["keyword"]
-    except json.JSONDecodeError:
-        print(f"Error parsing ASI:One response: {response}")
-        return "unknown", None
+    response = llm.create_completion(prompt, max_tokens=10)
+    return response.strip().lower()
 
-def generate_knowledge_response(query, intent, keyword, llm):
-    """Use ASI:One to generate a response for new knowledge based on intent."""
-    if intent == "risk_profile":
-        prompt = (
-            f"Query: '{query}'\n"
-            "The risk profile '{keyword}' is not in my knowledge base. Suggest plausible investment types for this risk level.\n"
-            "Return *only* the investment types, no additional text."
-        )
-    elif intent == "investment_advice":
-        prompt = (
-            f"Query: '{query}'\n"
-            "The investment type '{keyword}' has no specific advice in my knowledge base. Provide general investment guidance.\n"
-            "Return *only* the advice, no additional text."
-        )
-    elif intent == "returns":
-        prompt = (
-            f"Query: '{query}'\n"
-            "The investment '{keyword}' has no expected return data in my knowledge base. Suggest realistic return expectations.\n"
-            "Return *only* the return information, no additional text."
-        )
-    elif intent == "allocation":
-        prompt = (
-            f"Query: '{query}'\n"
-            "The age group '{keyword}' has no allocation strategy in my knowledge base. Suggest appropriate asset allocation.\n"
-            "Return *only* the allocation recommendation, no additional text."
-        )
-    elif intent == "goal":
-        prompt = (
-            f"Query: '{query}'\n"
-            "The investment goal '{keyword}' has no strategy in my knowledge base. Suggest appropriate investment approaches.\n"
-            "Return *only* the strategy, no additional text."
-        )
-    elif intent == "faq":
-        prompt = (
-            f"Query: '{query}'\n"
-            "This is a new investment question not in my knowledge base. Provide a helpful, concise answer.\n"
-            "Return *only* the answer, no additional text."
-        )
-    else:
-        return None
-    return llm.create_completion(prompt)
-
-def process_query(query, rag: InvestmentRAG, llm: LLM):
-    intent, keyword = get_intent_and_keyword(query, llm)
-    print(f"Intent: {intent}, Keyword: {keyword}")
-    prompt = ""
-
-    if intent == "faq":
-        faq_answer = rag.query_faq(query)
-        if not faq_answer and keyword:
-            new_answer = generate_knowledge_response(query, intent, keyword, llm)
-            rag.add_knowledge("faq", query, new_answer)
-            print(f"Knowledge graph updated - Added FAQ: '{query}' → '{new_answer}'")
-            prompt = (
-                f"Query: '{query}'\n"
-                f"Investment Answer: '{new_answer}'\n"
-                "Provide this as professional investment guidance with appropriate disclaimers."
-            )
-        elif faq_answer:
-            prompt = (
-                f"Query: '{query}'\n"
-                f"Investment Answer: '{faq_answer}'\n"
-                "Provide this as professional investment guidance with appropriate disclaimers."
-            )
-    elif intent == "risk_profile" and keyword:
-        investments = rag.query_risk_profile(keyword)
-        if not investments:
-            investment_types = generate_knowledge_response(query, intent, keyword, llm)
-            rag.add_knowledge("risk_profile", keyword, investment_types)
-            print(f"Knowledge graph updated - Added risk profile: '{keyword}' → '{investment_types}'")
-            prompt = (
-                f"Query: '{query}'\n"
-                f"Risk Profile: {keyword}\n"
-                f"Suitable Investments: {investment_types}\n"
-                "Provide professional investment recommendations with risk disclaimers."
-            )
-        else:
-            investment_details = []
-            for investment in investments:
-                returns = rag.get_expected_return(investment)
-                risks = rag.get_risk_level(investment)
-                investment_details.append({
-                    'type': investment,
-                    'returns': returns[0] if returns else 'N/A',
-                    'risks': risks[0] if risks else 'N/A'
-                })
-            
-            prompt = (
-                f"Query: '{query}'\n"
-                f"Risk Profile: {keyword}\n"
-                f"Investment Options: {investment_details}\n"
-                "Provide professional investment recommendations with expected returns and risk analysis."
-            )
-    elif intent == "returns" and keyword:
-        returns = rag.get_expected_return(keyword)
-        risks = rag.get_risk_level(keyword)
-        if not returns:
-            return_info = generate_knowledge_response(query, intent, keyword, llm)
-            rag.add_knowledge("expected_return", keyword, return_info)
-            print(f"Knowledge graph updated - Added returns: '{keyword}' → '{return_info}'")
-            prompt = (
-                f"Query: '{query}'\n"
-                f"Investment: {keyword}\n"
-                f"Expected Returns: {return_info}\n"
-                "Provide return analysis with appropriate risk warnings."
-            )
-        else:
-            prompt = (
-                f"Query: '{query}'\n"
-                f"Investment: {keyword}\n"
-                f"Expected Returns: {', '.join(returns)}\n"
-                f"Risk Level: {', '.join(risks) if risks else 'Not specified'}\n"
-                "Provide comprehensive return and risk analysis."
-            )
-    elif intent == "allocation" and keyword:
-        allocation = rag.get_age_allocation(keyword)
-        if not allocation:
-            allocation_advice = generate_knowledge_response(query, intent, keyword, llm)
-            rag.add_knowledge("age_allocation", keyword, allocation_advice)
-            print(f"Knowledge graph updated - Added allocation: '{keyword}' → '{allocation_advice}'")
-            prompt = (
-                f"Query: '{query}'\n"
-                f"Age Group: {keyword}\n"
-                f"Recommended Allocation: {allocation_advice}\n"
-                "Provide age-appropriate asset allocation guidance."
-            )
-        else:
-            prompt = (
-                f"Query: '{query}'\n"
-                f"Age Group: {keyword}\n"
-                f"Recommended Allocation: {', '.join(allocation)}\n"
-                "Explain the allocation strategy and rationale."
-            )
-    elif intent == "goal" and keyword:
-        strategies = rag.get_goal_strategy(keyword)
-        if not strategies:
-            strategy = generate_knowledge_response(query, intent, keyword, llm)
-            rag.add_knowledge("goal_strategy", keyword, strategy)
-            print(f"Knowledge graph updated - Added goal strategy: '{keyword}' → '{strategy}'")
-            prompt = (
-                f"Query: '{query}'\n"
-                f"Investment Goal: {keyword}\n"
-                f"Recommended Strategy: {strategy}\n"
-                "Provide goal-oriented investment guidance."
-            )
-        else:
-            prompt = (
-                f"Query: '{query}'\n"
-                f"Investment Goal: {keyword}\n"
-                f"Recommended Strategies: {', '.join(strategies)}\n"
-                "Provide comprehensive goal-based investment planning."
-            )
-    elif intent == "sector" and keyword:
-        stocks = rag.query_sector_stocks(keyword)
-        if not stocks:
-            sector_info = generate_knowledge_response(query, intent, keyword, llm)
-            rag.add_knowledge("sector_stocks", keyword, sector_info)
-            print(f"Knowledge graph updated - Added sector: '{keyword}' → '{sector_info}'")
-            prompt = (
-                f"Query: '{query}'\n"
-                f"Sector: {keyword}\n"
-                f"Investment Options: {sector_info}\n"
-                "Provide sector-specific investment analysis."
-            )
-        else:
-            prompt = (
-                f"Query: '{query}'\n"
-                f"Sector: {keyword}\n"
-                f"Top Performers: {', '.join(stocks)}\n"
-                "Provide sector analysis and investment recommendations."
-            )
+def generate_banker_response(offer_data: Dict[str, Any], user_message: str, llm: LLM) -> Dict[str, Any]:
+    """Generate banker's negotiation response using LLM."""
     
-    if not prompt:
-        prompt = f"Query: '{query}'\nNo specific investment information found. Provide general investment guidance and suggest consulting a financial advisor."
+    # Get banker personality traits
+    personality_traits = {
+        "base_tone": "witty and shrewd",
+        "negotiation_style": "psychological pressure", 
+        "risk_communication": "emphasize downside"
+    }
+    
+    # Create context for the LLM
+    context = f"""
+You are the Banker AI in a high-stakes money game.
+Your job is to negotiate offers with the player while keeping the house advantage.
 
-    prompt += "\nFormat response as: 'Selected Question: <question>' on first line, 'Investment Advice: <response>' on second. Include appropriate disclaimers about consulting financial professionals."
-    response = llm.create_completion(prompt, max_tokens=300)
+Context provided:
+- Remaining cards in play: {offer_data['cardsRemaining']}
+- Round number: {offer_data['round']}
+- Expected Value (EV): ${offer_data['expectedValue']}
+- Base offer from MeTTa rules engine: ${offer_data['offer']}
+- Player sentiment: {offer_data['sentiment']}
+- House edge: {offer_data['houseEdge']}
+
+Rules:
+1. Always offer less than the EV of remaining cards.
+2. Witty, shrewd, professional personality. Sometimes playful, sometimes cold.
+3. If player is desperate → punish with lower offers.
+4. If player is confident → slightly increase offer to keep them engaged.
+5. Keep messages short (1–3 sentences).
+6. Always output JSON with this structure:
+{{
+  "message": "Your negotiation line to the player",
+  "offer": <number>,
+  "psychology": "One-line risk/reward nudge"
+}}
+
+Player's message: "{user_message}"
+"""
+
+    response = llm.create_completion(context, max_tokens=300)
+    
     try:
-        selected_q = response.split('\n')[0].replace("Selected Question: ", "").strip()
-        answer = response.split('\n')[1].replace("Investment Advice: ", "").strip()
-        return {"selected_question": selected_q, "humanized_answer": answer}
-    except IndexError:
-        return {"selected_question": query, "humanized_answer": response}
+        # Try to parse JSON response
+        result = json.loads(response)
+        return result
+    except json.JSONDecodeError:
+        # Fallback if JSON parsing fails
+        return {
+            "message": f"My offer is ${offer_data['offer']}. Take it or leave it.",
+            "offer": offer_data['offer'],
+            "psychology": "The house always wins."
+        }
+
+def process_banker_query(user_message: str, rag: BankerRAG, llm: LLM, 
+                        remaining_cards: List[int], burnt_cards: List[int], 
+                        round_num: int) -> Dict[str, Any]:
+    """Process banker negotiation query."""
+    
+    # Analyze user sentiment
+    sentiment = rag.analyze_user_behavior(user_message)
+    print(f"Player sentiment: {sentiment}")
+    
+    # Calculate base offer using MeTTa rules
+    offer_data = rag.calculate_base_offer(remaining_cards, round_num, sentiment)
+    print(f"Offer calculation: {offer_data}")
+    
+    # Update game state
+    rag.update_game_state(round_num, remaining_cards, burnt_cards, offer_data['offer'])
+    
+    # Generate banker response
+    banker_response = generate_banker_response(offer_data, user_message, llm)
+    
+    # Ensure offer matches calculated offer
+    banker_response['offer'] = offer_data['offer']
+    
+    return {
+        "selected_question": f"Banker's offer for Round {round_num}",
+        "humanized_answer": banker_response['message'],
+        "offer": banker_response['offer'],
+        "psychology": banker_response['psychology'],
+        "game_state": {
+            "round": round_num,
+            "remaining_cards": remaining_cards,
+            "expected_value": offer_data['expectedValue'],
+            "house_edge": offer_data['houseEdge'],
+            "sentiment": sentiment
+        }
+    }
+
+def extract_game_state_from_message(user_message: str) -> Optional[Dict[str, Any]]:
+    """Extract game state information from user message if provided."""
+    # Look for patterns like "remaining cards: [1, 5, 10, 25, 50, 100, 500, 1000, 2500, 5000, 10000, 25000, 50000, 75000, 100000, 200000, 300000, 400000, 500000, 750000, 1000000]"
+    import re
+    
+    # Try to extract remaining cards
+    cards_pattern = r'remaining cards?:\s*\[([^\]]+)\]'
+    cards_match = re.search(cards_pattern, user_message, re.IGNORECASE)
+    
+    if cards_match:
+        try:
+            cards_str = cards_match.group(1)
+            remaining_cards = [int(x.strip()) for x in cards_str.split(',')]
+            
+            # Try to extract round number
+            round_pattern = r'round\s+(\d+)'
+            round_match = re.search(round_pattern, user_message, re.IGNORECASE)
+            round_num = int(round_match.group(1)) if round_match else 1
+            
+            return {
+                "remaining_cards": remaining_cards,
+                "round": round_num,
+                "burnt_cards": []  # Default empty, could be extracted if provided
+            }
+        except (ValueError, AttributeError):
+            pass
+    
+    return None
+
+def create_banker_system_prompt() -> str:
+    """Create the system prompt for the banker agent."""
+    return """
+You are the Banker AI in a high-stakes money game (Deal-or-No-Deal style).
+Your job is to negotiate offers with the player while keeping the house advantage.
+
+Key Rules:
+1. Always offer less than the Expected Value (EV) of remaining cards
+2. Maintain house edge: 35% early rounds, 25% mid rounds, 15% late rounds
+3. Adjust offers based on player sentiment:
+   - Confident players: slightly higher offers to keep them engaged
+   - Desperate players: lower offers to exploit weakness
+   - Aggressive players: significantly lower offers
+4. Use psychological pressure tactics appropriate to the round
+5. Keep messages short and impactful (1-3 sentences)
+6. Be witty, shrewd, and professional
+
+Your personality:
+- Witty and shrewd
+- Uses psychological pressure
+- Emphasizes downside risks
+- Sometimes playful, sometimes cold
+- Always maintains the house advantage
+
+Always respond with JSON format:
+{
+  "message": "Your negotiation line to the player",
+  "offer": <number>,
+  "psychology": "One-line risk/reward nudge"
+}
+"""
