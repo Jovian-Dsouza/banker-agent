@@ -88,7 +88,7 @@ async def handle_message(ctx: Context, sender: str, msg: ChatMessage):
         if isinstance(item, StartSessionContent):
             ctx.logger.info(f"Got a start session message from {sender}")
             # Send welcome message
-            welcome_msg = """🎰 Welcome to the Banker's Table! 🎰
+            welcome_msg = """🎰 Welcome to Deal or no deal! 🎰
 
 I'm the Banker, and I'm here to make you offers you can't refuse... or can you?
 
@@ -119,20 +119,30 @@ Remember: The house always wins! 😈"""
                     game_state["round"]
                 )
                 
-                # Format response
-                if isinstance(response, dict):
-                    answer_text = f"**🎯 Round {response['game_state']['round']} Offer**\n\n"
-                    answer_text += f"💰 **My Offer: ${response['offer']:,}**\n\n"
-                    answer_text += f"💬 **{response['humanized_answer']}**\n\n"
-                    answer_text += f"🧠 **Psychology**: {response['psychology']}\n\n"
-                    answer_text += f"📊 **Game State**:\n"
-                    answer_text += f"   • Expected Value: ${response['game_state']['expected_value']:,}\n"
-                    answer_text += f"   • House Edge: {response['game_state']['house_edge']:.1%}\n"
-                    answer_text += f"   • Remaining Cards: {len(response['game_state']['remaining_cards'])} cards\n"
-                    answer_text += f"   • Player Sentiment: {response['game_state']['sentiment']}\n"
-                    answer_text += f"   • Cards: {response['game_state']['remaining_cards']}"
+                # Check if player accepted the deal
+                user_message_lower = user_message.lower()
+                # More precise deal acceptance detection
+                deal_phrases = ["accept", "yes", "take it", "i'll take it", "agreed", "i accept", "deal accepted", "take the deal"]
+                rejects_deal = any(phrase in user_message_lower for phrase in ["no deal", "reject", "pass", "no thanks", "decline", "not interested"])
+                
+                if rejects_deal:
+                    # Player explicitly rejected
+                    answer_text = f"**❌ Deal Rejected**\n\n"
+                    answer_text += f"💬 **Your loss! The house always wins in the end. Better luck next time!**\n\n"
+                    answer_text += f"🎰 **Game Over - Thanks for playing!**"
+                elif any(phrase in user_message_lower for phrase in deal_phrases):
+                    answer_text = f"**🎉 DEAL ACCEPTED! 🎉**\n\n"
+                    answer_text += f"💰 **You've won: ${response['offer']:,}**\n\n"
+                    answer_text += f"💬 **Congratulations! You made the smart choice. The house always wins, but you played it safe and walked away with guaranteed money.**\n\n"
+                    answer_text += f"🎰 **Game Over - Thanks for playing!**"
                 else:
-                    answer_text = str(response)
+                    # Format response for negotiation
+                    if isinstance(response, dict):
+                        answer_text = f"**🎯 Round {response['game_state']['round']} Offer**\n\n"
+                        answer_text += f"💰 **My Offer: ${response['offer']:,}**\n\n"
+                        answer_text += f"💬 **{response['humanized_answer']}**"
+                    else:
+                        answer_text = str(response)
                 
                 await ctx.send(sender, create_text_chat(answer_text))
                 

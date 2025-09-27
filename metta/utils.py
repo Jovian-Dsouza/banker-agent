@@ -60,8 +60,7 @@ Rules:
 6. Always output JSON with this structure:
 {{
   "message": "Your negotiation line to the player",
-  "offer": <number>,
-  "psychology": "One-line risk/reward nudge"
+  "offer": <number>
 }}
 
 Player's message: "{user_message}"
@@ -77,8 +76,7 @@ Player's message: "{user_message}"
         # Fallback if JSON parsing fails
         return {
             "message": f"My offer is ${offer_data['offer']}. Take it or leave it.",
-            "offer": offer_data['offer'],
-            "psychology": "The house always wins."
+            "offer": offer_data['offer']
         }
 
 def process_banker_query(user_message: str, rag: BankerRAG, llm: LLM, 
@@ -107,7 +105,6 @@ def process_banker_query(user_message: str, rag: BankerRAG, llm: LLM,
         "selected_question": f"Banker's offer for Round {round_num}",
         "humanized_answer": banker_response['message'],
         "offer": banker_response['offer'],
-        "psychology": banker_response['psychology'],
         "game_state": {
             "round": round_num,
             "remaining_cards": remaining_cards,
@@ -173,7 +170,6 @@ Your personality:
 Always respond with JSON format:
 {
   "message": "Your negotiation line to the player",
-  "offer": <number>,
-  "psychology": "One-line risk/reward nudge"
+  "offer": <number>
 }
 """
